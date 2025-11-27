@@ -1,7 +1,15 @@
-import React from "react";
-
-function App() {
-  return <div className="bg-stone-800 min-h-dvh text-amber-100">App</div>;
+import React from 'react'
+import { Routes, Route } from 'react-router-dom'
+import CosmicLogin from '../pages/loginpage'
+import CosmicSignup from '../pages/SignupPage'
+const App = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<CosmicLogin />} />
+       <Route path="/login" element={<CosmicLogin />} />
+      <Route path="/signup" element={<CosmicSignup />} />
+    </Routes>
+  )
 }
 
-export default App;
+export default App
