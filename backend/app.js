@@ -18,13 +18,13 @@ import {
 } from "./controllers/user.controller.js";
 
 const app = express();
-
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  })
-);
+app.use(cors());
+// app.use(
+//   cors({
+//     origin: true,
+//     credentials: true,
+//   })
+// );
 
 // --------------------
 // Rate Limiting
