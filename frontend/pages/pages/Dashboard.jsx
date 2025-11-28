@@ -1,808 +1,589 @@
 import React, { useState, useEffect } from "react";
 import {
-  Plus,
-  Trash2,
-  Edit2,
-  Save,
-  X,
-  Link2,
-  StickyNote,
-  ExternalLink,
-  Clock,
-  Pin,
+  FileText,
+  Upload,
+  Share2,
+  Users,
+  Key,
+  Lock,
+  Shield,
+  User,
   Search,
-  Grid,
-  List,
+  Moon,
+  Sun,
   Sparkles,
+  Home,
+  BarChart3,
+  Settings,
+  Bell,
+  Folder,
+  Plus,
+  Mail,
+  Calendar,
+  HardDrive,
+  MessageCircle,
+  X,
+  Send,
+  Database,
+  Cloud,
+  Cpu,
+  Globe
 } from "lucide-react";
 import { useUser, UserButton } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
 
-export default function Dashboard() {
-  // ---- Clerk user ----
+const Dashboard = () => {
   const { user, isLoaded, isSignedIn } = useUser();
+  const [activeSection, setActiveSection] = useState('documents');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showChatbot, setShowChatbot] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [messageInput, setMessageInput] = useState('');
 
-  // ---- Local state ----
-  const [notes, setNotes] = useState([]);
-  const [links, setLinks] = useState([]);
-  const [activeTab, setActiveTab] = useState("notes");
-  const [viewMode, setViewMode] = useState("grid");
-  const [searchTerm, setSearchTerm] = useState("");
+  // Theme system
+  useEffect(() => {
+    const stored = localStorage.getItem('theme');
+    if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setIsDarkMode(true);
+    }
+  }, []);
 
-  // Note states
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState(null);
-  const [newNote, setNewNote] = useState({
-    title: "",
-    content: "",
-    color: "slate",
-    pinned: false,
-  });
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
-  // Link states
-  const [isAddingLink, setIsAddingLink] = useState(false);
-  const [editingLinkId, setEditingLinkId] = useState(null);
-  const [newLink, setNewLink] = useState({
-    title: "",
-    url: "",
-    description: "",
-    category: "General",
-  });
+  // Mock notifications
+  useEffect(() => {
+    setNotifications([
+      {
+        id: 1,
+        title: "Welcome to Dashboard",
+        message: "Your account has been setup successfully",
+        time: "2 minutes ago",
+        read: false,
+        type: "success"
+      },
+      {
+        id: 2,
+        title: "Security Update",
+        message: "New security features are available",
+        time: "1 hour ago",
+        read: false,
+        type: "warning"
+      },
+      {
+        id: 3,
+        title: "Storage Alert",
+        message: "You've used 80% of your storage",
+        time: "3 hours ago",
+        read: true,
+        type: "info"
+      }
+    ]);
+  }, []);
 
-  const noteColors = [
-    {
-      name: "slate",
-      bg: "bg-slate-100",
-      border: "border-slate-300",
-      text: "text-slate-900",
+  // Mock chatbot messages
+  useEffect(() => {
+    setChatMessages([
+      {
+        id: 1,
+        text: "Hello! I'm your assistant. How can I help you today?",
+        isBot: true,
+        time: new Date()
+      }
+    ]);
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(notifications.map(notif => ({ ...notif, read: true })));
+  };
+
+  const sendMessage = () => {
+    if (!messageInput.trim()) return;
+
+    const newMessage = {
+      id: Date.now(),
+      text: messageInput,
+      isBot: false,
+      time: new Date()
+    };
+
+    setChatMessages(prev => [...prev, newMessage]);
+    setMessageInput('');
+
+    // Mock bot response
+    setTimeout(() => {
+      const botResponse = {
+        id: Date.now() + 1,
+        text: "I understand. How can I assist you with that?",
+        isBot: true,
+        time: new Date()
+      };
+      setChatMessages(prev => [...prev, botResponse]);
+    }, 1000);
+  };
+
+  const lightTheme = {
+    background: "bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50/80",
+    card: "bg-white/80 backdrop-blur-sm border-white/20 shadow-xl",
+    text: {
+      primary: "text-slate-900",
+      secondary: "text-slate-600",
     },
-    {
-      name: "emerald",
-      bg: "bg-emerald-100",
-      border: "border-emerald-300",
-      text: "text-emerald-900",
+    button: {
+      primary: "bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95",
+      secondary: "bg-white/80 backdrop-blur-sm border border-slate-200/60 hover:bg-white text-slate-700 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-95"
+    }
+  };
+
+  const darkTheme = {
+    background: "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900",
+    card: "bg-gray-800/60 backdrop-blur-sm border-gray-700/50 shadow-xl",
+    text: {
+      primary: "text-white",
+      secondary: "text-gray-300",
     },
-    {
-      name: "blue",
-      bg: "bg-blue-100",
-      border: "border-blue-300",
-      text: "text-blue-900",
-    },
-    {
-      name: "purple",
-      bg: "bg-purple-100",
-      border: "border-purple-300",
-      text: "text-purple-900",
-    },
-    {
-      name: "amber",
-      bg: "bg-amber-100",
-      border: "border-amber-300",
-      text: "text-amber-900",
-    },
+    button: {
+      primary: "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95",
+      secondary: "bg-gray-700/60 backdrop-blur-sm border border-gray-600/50 hover:bg-gray-700 text-gray-300 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-95"
+    }
+  };
+
+  const theme = isDarkMode ? darkTheme : lightTheme;
+
+  const navItems = [
+    { id: 'documents', label: 'Documents', icon: FileText },
+    { id: 'upload', label: 'Upload', icon: Upload },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'database', label: 'Database', icon: Database },
+    { id: 'cloud', label: 'Cloud Services', icon: Cloud },
+    { id: 'security', label: 'Security', icon: Shield },
+    { id: 'performance', label: 'Performance', icon: Cpu },
+    { id: 'network', label: 'Network', icon: Globe },
+    { id: 'team', label: 'Team', icon: Users },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  // -------------------------------
-  // Storage helpers (per Clerk user)
-  // -------------------------------
-  const notesKey = user ? `user-notes-${user.id}` : null;
-  const linksKey = user ? `user-links-${user.id}` : null;
-
-  // Load data when Clerk user is ready
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || !notesKey || !linksKey) return;
-
-    try {
-      const storedNotes = localStorage.getItem(notesKey);
-      const storedLinks = localStorage.getItem(linksKey);
-
-      if (storedNotes) setNotes(JSON.parse(storedNotes));
-      if (storedLinks) setLinks(JSON.parse(storedLinks));
-    } catch (err) {
-      console.error("Failed to load user data:", err);
-    }
-  }, [isLoaded, isSignedIn, notesKey, linksKey]);
-
-  const saveNotes = (updatedNotes) => {
-    if (!notesKey) return;
-    try {
-      localStorage.setItem(notesKey, JSON.stringify(updatedNotes));
-      setNotes(updatedNotes);
-    } catch (err) {
-      console.error("Failed to save notes:", err);
-    }
-  };
-
-  const saveLinks = (updatedLinks) => {
-    if (!linksKey) return;
-    try {
-      localStorage.setItem(linksKey, JSON.stringify(updatedLinks));
-      setLinks(updatedLinks);
-    } catch (err) {
-      console.error("Failed to save links:", err);
-    }
-  };
-
-  // ------------- Note functions -------------
-  const handleAddNote = () => {
-    if (newNote.title.trim() || newNote.content.trim()) {
-      const note = {
-        id: Date.now(),
-        ...newNote,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      saveNotes([note, ...notes]);
-      setNewNote({ title: "", content: "", color: "slate", pinned: false });
-      setIsAddingNote(false);
-    }
-  };
-
-  const handleUpdateNote = (id) => {
-    const updatedNotes = notes.map((note) =>
-      note.id === id
-        ? { ...note, ...newNote, updatedAt: new Date().toISOString() }
-        : note
-    );
-    saveNotes(updatedNotes);
-    setEditingNoteId(null);
-    setNewNote({ title: "", content: "", color: "slate", pinned: false });
-  };
-
-  const handleDeleteNote = (id) => {
-    saveNotes(notes.filter((note) => note.id !== id));
-  };
-
-  const handlePinNote = (id) => {
-    const updatedNotes = notes.map((note) =>
-      note.id === id ? { ...note, pinned: !note.pinned } : note
-    );
-    saveNotes(updatedNotes);
-  };
-
-  const startEditingNote = (note) => {
-    setEditingNoteId(note.id);
-    setNewNote({
-      title: note.title,
-      content: note.content,
-      color: note.color,
-      pinned: note.pinned,
-    });
-  };
-
-  // ------------- Link functions -------------
-  const handleAddLink = () => {
-    if (newLink.title.trim() && newLink.url.trim()) {
-      const link = {
-        id: Date.now(),
-        ...newLink,
-        createdAt: new Date().toISOString(),
-      };
-      saveLinks([link, ...links]);
-      setNewLink({
-        title: "",
-        url: "",
-        description: "",
-        category: "General",
-      });
-      setIsAddingLink(false);
-    }
-  };
-
-  const handleUpdateLink = (id) => {
-    const updatedLinks = links.map((link) =>
-      link.id === id ? { ...link, ...newLink } : link
-    );
-    saveLinks(updatedLinks);
-    setEditingLinkId(null);
-    setNewLink({
-      title: "",
-      url: "",
-      description: "",
-      category: "General",
-    });
-  };
-
-  const handleDeleteLink = (id) => {
-    saveLinks(links.filter((link) => link.id !== id));
-  };
-
-  const startEditingLink = (link) => {
-    setEditingLinkId(link.id);
-    setNewLink({
-      title: link.title,
-      url: link.url,
-      description: link.description,
-      category: link.category,
-    });
-  };
-
-  // ------------- Filters / helpers -------------
-  const filteredNotes = notes
-    .filter(
-      (note) =>
-        note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        note.content.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort(
-      (a, b) =>
-        b.pinned - a.pinned ||
-        new Date(b.updatedAt) - new Date(a.updatedAt)
-    );
-
-  const filteredLinks = links.filter(
-    (link) =>
-      link.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      link.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      link.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  // ------------- Loading / auth guards -------------
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-        Loading dashboard...
+      <div className={`min-h-screen ${theme.background} flex items-center justify-center transition-colors duration-300`}>
+        <div className="flex items-center gap-3">
+          <Sparkles className="w-6 h-6 text-blue-500 animate-pulse" />
+          <span className={theme.text.primary}>Loading...</span>
+        </div>
       </div>
     );
   }
 
   if (!isSignedIn) {
-    // Route should already be protected by <SignedIn>, but just in case:
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-        You are not signed in.
+      <div className={`min-h-screen ${theme.background} flex items-center justify-center transition-colors duration-300`}>
+        <div className="text-center">
+          <Sparkles className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+          <h2 className={`text-2xl font-bold mb-2 ${theme.text.primary}`}>Please Sign In</h2>
+          <p className={theme.text.secondary}>You need to be signed in to access this dashboard</p>
+        </div>
       </div>
     );
   }
 
-  const displayName =
-    user.fullName || user.primaryEmailAddress?.emailAddress || "User";
+  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "User";
+  const userInitial = displayName.charAt(0).toUpperCase();
+  const unreadCount = notifications.filter(n => !n.read).length;
 
-  // ------------- UI -------------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50">
+    <div className={`min-h-screen ${theme.background} transition-colors duration-300`}>
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm bg-white/80">
+      <header className={`border-b backdrop-blur-lg sticky top-0 z-50 ${
+        isDarkMode 
+          ? 'bg-gray-900/80 border-gray-700/50 shadow-xl' 
+          : 'bg-white/80 border-slate-200/50 shadow-xl'
+      }`}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
+                  isDarkMode 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                    : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                }`}>
                   <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-slate-900">
+                  <h1 className={`text-xl font-bold ${theme.text.primary}`}>
                     Dashboard
                   </h1>
-                  <p className="text-xs text-slate-500">
+                  <p className={`text-xs ${theme.text.secondary}`}>
                     Welcome back, {displayName}
                   </p>
                 </div>
               </div>
             </div>
+            
             <div className="flex items-center gap-3">
               <Link
                 to="/"
-                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors"
+                className={`flex items-center gap-2 px-4 py-2 text-sm rounded-xl transition-all duration-300 hover:scale-105 ${
+                  isDarkMode
+                    ? 'text-gray-300 hover:text-white hover:bg-gray-700/50 backdrop-blur-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 backdrop-blur-sm'
+                }`}
               >
+                <Home className="w-4 h-4" />
                 Home
               </Link>
-              {/* Clerk UserButton handles profile + logout */}
-              <UserButton afterSignOutUrl="/sign-in" />
+              
+              {/* Notifications */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 relative ${
+                    isDarkMode
+                      ? 'text-gray-300 hover:text-white hover:bg-gray-700/50 backdrop-blur-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 backdrop-blur-sm'
+                  }`}
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse shadow-lg">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className={`absolute right-0 top-12 w-80 rounded-2xl border shadow-2xl backdrop-blur-lg ${
+                    isDarkMode ? 'bg-gray-800/90 border-gray-700/50' : 'bg-white/90 border-slate-200/50'
+                  }`}>
+                    <div className={`p-4 border-b ${
+                      isDarkMode ? 'border-gray-700/50' : 'border-slate-200/50'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <h3 className={`font-semibold ${theme.text.primary}`}>Notifications</h3>
+                        <button
+                          onClick={markAllAsRead}
+                          className={`text-sm transition-colors duration-300 ${
+                            isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-blue-600 hover:text-blue-700'
+                          }`}
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.map(notification => (
+                        <div
+                          key={notification.id}
+                          className={`p-4 border-b transition-all duration-300 hover:scale-[1.01] ${
+                            isDarkMode ? 'border-gray-700/50 hover:bg-gray-700/50' : 'border-slate-100/50 hover:bg-slate-50/50'
+                          } ${!notification.read ? (isDarkMode ? 'bg-amber-500/10' : 'bg-blue-50/50') : ''}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                              notification.type === 'success' ? 'bg-green-500' : 
+                              notification.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+                            }`} />
+                            <div className="flex-1">
+                              <h4 className={`font-medium ${theme.text.primary}`}>{notification.title}</h4>
+                              <p className={`text-sm mt-1 ${theme.text.secondary}`}>{notification.message}</p>
+                              <p className={`text-xs mt-2 ${
+                                isDarkMode ? 'text-gray-500' : 'text-slate-400'
+                              }`}>{notification.time}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 ${
+                  isDarkMode
+                    ? 'text-gray-300 hover:text-white hover:bg-gray-700/50 backdrop-blur-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 backdrop-blur-sm'
+                }`}
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              
+              <UserButton 
+                afterSignOutUrl="/sign-in"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-9 h-9 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110",
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Total Notes</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {notes.length}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <StickyNote className="w-6 h-6 text-emerald-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Saved Links</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {links.length}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Link2 className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Pinned Notes</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {notes.filter((n) => n.pinned).length}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                <Pin className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex gap-6">
+          {/* Sidebar */}
+          <div className={`rounded-2xl border p-4 transition-all duration-300 flex flex-col flex-shrink-0 h-fit sticky top-32 backdrop-blur-sm ${
+            sidebarOpen ? 'w-64' : 'w-20'
+          } ${theme.card}`}>
+            <div className="flex items-center justify-between mb-6">
+              {sidebarOpen && <h2 className={`text-lg font-semibold ${theme.text.primary}`}>Navigation</h2>}
               <button
-                onClick={() => setActiveTab("notes")}
-                className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${
-                  activeTab === "notes"
-                    ? "bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-md"
-                    : "text-slate-600 hover:bg-slate-100"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 ${
+                  isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-slate-100/80'
                 }`}
               >
-                <StickyNote className="w-4 h-4 inline mr-2" />
-                Notes
-              </button>
-              <button
-                onClick={() => setActiveTab("links")}
-                className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${
-                  activeTab === "links"
-                    ? "bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-md"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <Link2 className="w-4 h-4 inline mr-2" />
-                Links
+                {sidebarOpen ? '«' : '»'}
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 md:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                />
-              </div>
-
-              <button
-                onClick={() =>
-                  setViewMode(viewMode === "grid" ? "list" : "grid")
-                }
-                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
-              >
-                {viewMode === "grid" ? (
-                  <List className="w-4 h-4" />
-                ) : (
-                  <Grid className="w-4 h-4" />
-                )}
-              </button>
-
-              <button
-                onClick={() =>
-                  activeTab === "notes"
-                    ? setIsAddingNote(true)
-                    : setIsAddingLink(true)
-                }
-                className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white rounded-lg flex items-center gap-2 text-sm font-medium shadow-md transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Add {activeTab === "notes" ? "Note" : "Link"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ---------- Notes Tab ---------- */}
-        {activeTab === "notes" && (
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                : "space-y-4"
-            }
-          >
-            {/* Add Note Form */}
-            {isAddingNote && (
-              <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-lg">
-                <input
-                  type="text"
-                  placeholder="Note title..."
-                  value={newNote.title}
-                  onChange={(e) =>
-                    setNewNote({ ...newNote, title: e.target.value })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg text-lg font-semibold focus:outline-none focus:border-emerald-500"
-                />
-                <textarea
-                  placeholder="Write your note..."
-                  value={newNote.content}
-                  onChange={(e) =>
-                    setNewNote({ ...newNote, content: e.target.value })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:border-emerald-500"
-                  rows={4}
-                />
-                <div className="flex items-center gap-2 mb-3">
-                  {noteColors.map((color) => (
-                    <button
-                      key={color.name}
-                      onClick={() =>
-                        setNewNote({ ...newNote, color: color.name })
-                      }
-                      className={`w-8 h-8 rounded-full ${color.bg} ${
-                        newNote.color === color.name
-                          ? "ring-2 ring-slate-900 ring-offset-2"
-                          : ""
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-end gap-2">
+            <nav className="flex-1 space-y-2">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
                   <button
-                    onClick={() => {
-                      setIsAddingNote(false);
-                      setNewNote({
-                        title: "",
-                        content: "",
-                        color: "slate",
-                        pinned: false,
-                      });
+                    key={item.id}
+                    onClick={() => setActiveSection(item.id)}
+                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-300 group hover:scale-[1.02] hover:translate-x-1 ${
+                      activeSection === item.id
+                        ? isDarkMode
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg'
+                          : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                        : `text-slate-600 dark:text-gray-300 ${
+                            isDarkMode ? 'hover:bg-gray-700/50 hover:text-white' : 'hover:bg-slate-100/80 hover:text-slate-900'
+                          }`
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110" />
+                    {sidebarOpen && <span className="ml-3 font-medium text-sm">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* User Profile */}
+            <div className="mt-6 pt-6 border-t border-slate-200/50 dark:border-gray-700/50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold flex-shrink-0 overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110">
+                  <UserButton 
+                    afterSignOutUrl="/sign-in"
+                    appearance={{
+                      elements: {
+                        avatarBox: "w-10 h-10 rounded-xl",
+                      }
                     }}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddNote}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save
-                  </button>
+                  />
                 </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {filteredNotes.map((note) => {
-              const colorScheme =
-                noteColors.find((c) => c.name === note.color) || noteColors[0];
-              return (
-                <div
-                  key={note.id}
-                  className={`${colorScheme.bg} ${colorScheme.border} border-2 rounded-2xl p-6 hover:shadow-lg transition-all relative group`}
-                >
-                  {note.pinned && (
-                    <Pin className="w-4 h-4 absolute top-3 right-3 text-slate-600 fill-slate-600" />
-                  )}
-
-                  {editingNoteId === note.id ? (
-                    <>
-                      <input
-                        type="text"
-                        value={newNote.title}
-                        onChange={(e) =>
-                          setNewNote({ ...newNote, title: e.target.value })
-                        }
-                        className={`w-full mb-3 px-3 py-2 ${colorScheme.bg} border border-slate-300 rounded-lg text-lg font-semibold focus:outline-none`}
-                      />
-                      <textarea
-                        value={newNote.content}
-                        onChange={(e) =>
-                          setNewNote({ ...newNote, content: e.target.value })
-                        }
-                        className={`w-full mb-3 px-3 py-2 ${colorScheme.bg} border border-slate-300 rounded-lg resize-none focus:outline-none`}
-                        rows={4}
-                      />
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingNoteId(null);
-                            setNewNote({
-                              title: "",
-                              content: "",
-                              color: "slate",
-                              pinned: false,
-                            });
-                          }}
-                          className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleUpdateNote(note.id)}
-                          className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
-                        >
-                          <Save className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <h3
-                        className={`text-lg font-bold ${colorScheme.text} mb-2`}
-                      >
-                        {note.title || "Untitled"}
-                      </h3>
-                      <p
-                        className={`${colorScheme.text} text-sm mb-4 whitespace-pre-wrap`}
-                      >
-                        {note.content}
-                      </p>
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(note.updatedAt)}
-                        </span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handlePinNote(note.id)}
-                            className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                          >
-                            <Pin
-                              className={`w-4 h-4 ${
-                                note.pinned ? "fill-slate-600" : ""
-                              }`}
-                            />
-                          </button>
-                          <button
-                            onClick={() => startEditingNote(note)}
-                            className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteNote(note.id)}
-                            className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-
-            {filteredNotes.length === 0 && !isAddingNote && (
-              <div className="col-span-full text-center py-16">
-                <StickyNote className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 mb-2">No notes yet</p>
-                <p className="text-sm text-slate-400">
-                  Click "Add Note" to create your first note
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ---------- Links Tab ---------- */}
-        {activeTab === "links" && (
-          <div className="space-y-4">
-            {/* Add Link Form */}
-            {isAddingLink && (
-              <div className="bg-white rounded-2xl border-2 border-emerald-500 p-6 shadow-lg">
-                <input
-                  type="text"
-                  placeholder="Link title..."
-                  value={newLink.title}
-                  onChange={(e) =>
-                    setNewLink({ ...newLink, title: e.target.value })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                />
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={newLink.url}
-                  onChange={(e) =>
-                    setNewLink({ ...newLink, url: e.target.value })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                />
-                <input
-                  type="text"
-                  placeholder="Description (optional)"
-                  value={newLink.description}
-                  onChange={(e) =>
-                    setNewLink({
-                      ...newLink,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                />
-                <select
-                  value={newLink.category}
-                  onChange={(e) =>
-                    setNewLink({ ...newLink, category: e.target.value })
-                  }
-                  className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                >
-                  <option>General</option>
-                  <option>Work</option>
-                  <option>Personal</option>
-                  <option>Learning</option>
-                  <option>Entertainment</option>
-                </select>
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => {
-                      setIsAddingLink(false);
-                      setNewLink({
-                        title: "",
-                        url: "",
-                        description: "",
-                        category: "General",
-                      });
-                    }}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddLink}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Links list */}
-            {filteredLinks.map((link) => (
-              <div
-                key={link.id}
-                className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg transition-all group"
-              >
-                {editingLinkId === link.id ? (
-                  <>
-                    <input
-                      type="text"
-                      value={newLink.title}
-                      onChange={(e) =>
-                        setNewLink({ ...newLink, title: e.target.value })
-                      }
-                      className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                    />
-                    <input
-                      type="url"
-                      value={newLink.url}
-                      onChange={(e) =>
-                        setNewLink({ ...newLink, url: e.target.value })
-                      }
-                      className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                    />
-                    <input
-                      type="text"
-                      value={newLink.description}
-                      onChange={(e) =>
-                        setNewLink({
-                          ...newLink,
-                          description: e.target.value,
-                        })
-                      }
-                      className="w-full mb-3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingLinkId(null);
-                          setNewLink({
-                            title: "",
-                            url: "",
-                            description: "",
-                            category: "General",
-                          });
-                        }}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleUpdateLink(link.id)}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                      >
-                        <Save className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center flex-shrink-0">
-                          <Link2 className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-bold text-slate-900 truncate">
-                            {link.title}
-                          </h3>
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1 truncate"
-                          >
-                            {link.url}
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                          </a>
-                        </div>
-                      </div>
-                      {link.description && (
-                        <p className="text-sm text-slate-600 mb-2 ml-13">
-                          {link.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 ml-13">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg">
-                          {link.category}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {formatDate(link.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => startEditingLink(link)}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteLink(link.id)}
-                        className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                {sidebarOpen && (
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${theme.text.primary}`}>{displayName}</p>
+                    <p className={`text-xs truncate ${theme.text.secondary}`}>
+                      {user?.primaryEmailAddress?.emailAddress}
+                    </p>
                   </div>
                 )}
               </div>
-            ))}
-
-            {filteredLinks.length === 0 && !isAddingLink && (
-              <div className="text-center py-16">
-                <Link2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 mb-2">No links saved yet</p>
-                <p className="text-sm text-slate-400">
-                  Click "Add Link" to save your first link
-                </p>
-              </div>
-            )}
+            </div>
           </div>
+
+          {/* Main Content */}
+          <div className="flex-1 min-w-0">
+            {/* Content Header */}
+            <div className={`rounded-2xl border p-6 mb-6 backdrop-blur-sm ${theme.card}`}>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h2 className={`text-2xl font-bold mb-2 ${theme.text.primary}`}>
+                    {navItems.find(item => item.id === activeSection)?.label || 'Dashboard'}
+                  </h2>
+                  <p className={theme.text.secondary}>
+                    Manage your {activeSection} and related settings
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="relative group">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors duration-300 group-focus-within:text-blue-500" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className={`pl-9 pr-4 py-2.5 border rounded-xl text-sm outline-none transition-all duration-300 w-64 focus:scale-[1.02] ${
+                        isDarkMode
+                          ? 'bg-gray-700/50 border-gray-600/50 text-white placeholder-gray-400 focus:border-amber-500'
+                          : 'border-slate-200/60 focus:border-blue-500'
+                      }`}
+                    />
+                  </div>
+                  
+                  <button className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium transition-all duration-300 ${theme.button.primary}`}>
+                    <Plus className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
+                    Add New
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Dynamic Content Area */}
+            <div className={`rounded-2xl border p-8 backdrop-blur-sm transition-all duration-300 hover:shadow-xl ${theme.card}`}>
+              <div className="text-center">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm ${
+                  isDarkMode ? 'bg-gray-700/50' : 'bg-slate-100/80'
+                }`}>
+                  {React.createElement(navItems.find(item => item.id === activeSection)?.icon || Settings, {
+                    className: `w-8 h-8 transition-colors duration-300 ${isDarkMode ? 'text-gray-300' : 'text-slate-500'}`
+                  })}
+                </div>
+                <h3 className={`text-xl font-semibold mb-3 ${theme.text.primary}`}>
+                  {navItems.find(item => item.id === activeSection)?.label} Section
+                </h3>
+                <p className={`max-w-md mx-auto mb-6 ${theme.text.secondary}`}>
+                  This is your {activeSection} management area. Build your functionality here.
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <button className={`px-4 py-2 rounded-lg transition-all duration-300 ${theme.button.secondary}`}>
+                    Configure
+                  </button>
+                  <button className={`px-4 py-2 rounded-lg transition-all duration-300 ${theme.button.primary}`}>
+                    Get Started
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Chatbot */}
+      <div className="fixed bottom-6 right-6 z-40">
+        {showChatbot ? (
+          <div className={`w-80 h-96 rounded-2xl border shadow-2xl flex flex-col backdrop-blur-lg ${
+            isDarkMode ? 'bg-gray-800/90 border-gray-700/50' : 'bg-white/90 border-slate-200/50'
+          }`}>
+            {/* Chat Header */}
+            <div className={`p-4 border-b ${
+              isDarkMode ? 'border-gray-700/50' : 'border-slate-200/50'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${
+                    isDarkMode 
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                  }`}>
+                    <MessageCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold ${theme.text.primary}`}>Assistant</h3>
+                    <p className={`text-xs ${theme.text.secondary}`}>Online</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowChatbot(false)}
+                  className={`p-1 rounded-lg transition-all duration-300 hover:scale-110 ${
+                    isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-slate-100/80'
+                  }`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 p-4 overflow-y-auto">
+              {chatMessages.map(message => (
+                <div
+                  key={message.id}
+                  className={`mb-4 transition-all duration-300 ${message.isBot ? 'text-left' : 'text-right'}`}
+                >
+                  <div className={`inline-block max-w-[80%] p-3 rounded-2xl backdrop-blur-sm transition-all duration-300 hover:scale-[1.01] ${
+                    message.isBot
+                      ? (isDarkMode ? 'bg-gray-700/50 text-white' : 'bg-slate-100/80 text-slate-900')
+                      : (isDarkMode ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white')
+                  }`}>
+                    <p className="text-sm">{message.text}</p>
+                  </div>
+                  <p className={`text-xs mt-1 ${
+                    isDarkMode ? 'text-gray-500' : 'text-slate-400'
+                  }`}>
+                    {message.time.toLocaleTimeString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Chat Input */}
+            <div className={`p-4 border-t ${
+              isDarkMode ? 'border-gray-700/50' : 'border-slate-200/50'
+            }`}>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                  placeholder="Type your message..."
+                  className={`flex-1 px-3 py-2 border rounded-xl text-sm outline-none transition-all duration-300 focus:scale-[1.02] ${
+                    isDarkMode
+                      ? 'bg-gray-700/50 border-gray-600/50 text-white placeholder-gray-400 focus:border-amber-500'
+                      : 'border-slate-200/60 focus:border-blue-500'
+                  }`}
+                />
+                <button
+                  onClick={sendMessage}
+                  className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 ${
+                    isDarkMode
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowChatbot(true)}
+            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 ${
+              isDarkMode
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
+                : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600'
+            }`}
+          >
+            <MessageCircle className="w-6 h-6 text-white transition-transform duration-300 hover:scale-110" />
+          </button>
         )}
-      </main>
+      </div>
+
+      {/* Close notifications when clicking outside */}
+      {showNotifications && (
+        <div 
+          className="fixed inset-0 z-30" 
+          onClick={() => setShowNotifications(false)}
+        />
+      )}
     </div>
   );
-}
+};
+
+export default Dashboard;
