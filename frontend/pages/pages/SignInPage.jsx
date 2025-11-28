@@ -1,10 +1,122 @@
-// src/pages/SignInPage.js
+// src/pages/SignInPage.jsx
 import React, { useState, useEffect } from "react";
-import { SignIn } from "@clerk/clerk-react";
+import { SignIn, useUser } from "@clerk/clerk-react";
 import { Shield, Sparkles, Check, Lock, Sun, Moon } from "lucide-react";
 
 export default function SignInPage() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(null);
+  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const { isSignedIn, user } = useUser();
+
+  // FIXED: Better sync timing with proper redirect handling
+  useEffect(() => {
+    if (isSignedIn && user && !isSyncing && !shouldRedirect) {
+      console.log('🔄 User signed in, starting sync...', {
+        id: user.id,
+        email: user.primaryEmailAddress?.emailAddress
+      });
+      syncUserToDatabase();
+    }
+  }, [isSignedIn, user]);
+
+  // FIXED: Separate effect for redirect to prevent loops
+  useEffect(() => {
+    if (shouldRedirect && !isSyncing) {
+      console.log('🚀 Redirecting to dashboard...');
+      window.location.href = '/dashboard';
+    }
+  }, [shouldRedirect, isSyncing]);
+
+  const syncUserToDatabase = async () => {
+    if (isSyncing) {
+      console.log('🔄 Sync already in progress, skipping...');
+      return;
+    }
+    
+    try {
+      setIsSyncing(true);
+      setSyncError(null);
+
+      console.log('🚀 Starting sync with data:', {
+        clerkId: user.id,
+        email: user.primaryEmailAddress?.emailAddress,
+        firstName: user.firstName,
+        lastName: user.lastName
+      });
+
+      const syncData = {
+        clerkId: user.id,
+        email: user.primaryEmailAddress?.emailAddress,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImage: user.profileImageUrl
+      };
+
+      const response = await fetch('http://localhost:5000/api/users/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'user-id': user.id,
+          'user-email': user.primaryEmailAddress?.emailAddress
+        },
+        body: JSON.stringify(syncData)
+      });
+
+      console.log('📡 Sync response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Sync failed with response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Sync response data:', data);
+
+      if (data.success) {
+        console.log('🎉 User successfully synced to database:', data.user);
+        // Store user role for later use
+        localStorage.setItem('userRole', data.user.role);
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        localStorage.setItem('lastSync', new Date().toISOString());
+        
+        // Clear any previous errors
+        setSyncError(null);
+        
+        console.log('🔄 Sync complete, setting redirect flag...');
+        // FIXED: Set flag instead of direct redirect
+        setShouldRedirect(true);
+      } else {
+        throw new Error(data.error || 'Failed to sync user');
+      }
+    } catch (error) {
+      console.error('💥 Failed to sync user to database:', error);
+      setSyncError(error.message);
+      
+      // Emergency fallback - store basic user info even if sync fails
+      if (user) {
+        console.log('🆘 Using emergency fallback storage');
+        localStorage.setItem('userRole', 'user');
+        localStorage.setItem('userData', JSON.stringify({
+          id: user.id,
+          email: user.primaryEmailAddress?.emailAddress,
+          role: 'user',
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImage: user.profileImageUrl
+        }));
+        localStorage.setItem('syncFailed', 'true');
+        
+        console.log('🔄 Fallback complete, setting redirect flag...');
+        // Still redirect but show warning
+        setShouldRedirect(true);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('theme');
@@ -77,30 +189,87 @@ export default function SignInPage() {
 
   return (
     <div className={`min-h-screen ${theme.background} p-4 flex items-center justify-center transition-colors duration-300 relative overflow-hidden`}>
-      
+
       {/* Theme Toggle Button */}
       <button
         onClick={toggleTheme}
-        className={`fixed top-4 right-4 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-          isDarkMode 
-            ? 'bg-amber-500 hover:bg-amber-600 text-white' 
+        className={`fixed top-4 right-4 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 ${isDarkMode
+            ? 'bg-amber-500 hover:bg-amber-600 text-white'
             : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-        } shadow-lg hover:shadow-xl transform hover:scale-110 active:scale-95`}
+          } shadow-lg hover:shadow-xl transform hover:scale-110 active:scale-95`}
       >
         {isDarkMode ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
       </button>
+
+      {/* Sync Status Indicator */}
+      {isSyncing && (
+        <div className={`fixed top-20 right-4 z-50 px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm border ${
+          isDarkMode 
+            ? 'bg-amber-500/20 border-amber-500/30 text-amber-200' 
+            : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-700'
+        }`}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-current rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium">Syncing user data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Error Display */}
+      {syncError && (
+        <div className={`fixed top-20 right-4 z-50 px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm border ${
+          isDarkMode 
+            ? 'bg-red-500/20 border-red-500/30 text-red-200' 
+            : 'bg-red-500/20 border-red-500/30 text-red-700'
+        } max-w-xs`}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-current rounded-full"></div>
+            <span className="text-sm font-medium">Sync Warning</span>
+          </div>
+          <p className="text-xs mt-1 opacity-80">Using local storage fallback</p>
+          <button 
+            onClick={syncUserToDatabase}
+            className="text-xs mt-2 underline hover:no-underline"
+          >
+            Retry Sync
+          </button>
+        </div>
+      )}
+
+      {/* Manual Redirect Button - FIXED: Show when signed in but not redirecting */}
+      {isSignedIn && !shouldRedirect && (
+        <div className={`fixed top-32 right-4 z-50 px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm border ${
+          isDarkMode 
+            ? 'bg-green-500/20 border-green-500/30 text-green-200' 
+            : 'bg-green-500/20 border-green-500/30 text-green-700'
+        }`}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-current rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium">Signed in!</span>
+            <button 
+              onClick={() => {
+                console.log('🔄 Manual redirect to dashboard');
+                window.location.href = '/dashboard';
+              }}
+              className="text-xs underline hover:no-underline font-medium"
+            >
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Background gradient shapes */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-0 right-0 w-64 h-64 md:w-96 md:h-96 ${theme.backgroundShapes[0]} rounded-full blur-3xl transition-all duration-500`}></div>
         <div className={`absolute bottom-0 left-0 w-64 h-64 md:w-96 md:h-96 ${theme.backgroundShapes[1]} rounded-full blur-3xl transition-all duration-500`}></div>
-        
+
         {/* Dark mode floating shapes */}
         {isDarkMode && (
           <>
-            <div className="absolute top-4 left-4 w-12 h-12 md:top-10 md:left-10 md:w-20 md:h-20 bg-amber-900 rounded-full opacity-15 animate-float transition-all duration-500"></div>
-            <div className="absolute bottom-4 right-4 w-16 h-16 md:bottom-10 md:right-10 md:w-24 md:h-24 bg-orange-900 rounded-full opacity-15 animate-float transition-all duration-500" style={{ animationDelay: '2s' }}></div>
-            <div className="absolute top-1/2 right-1/4 w-10 h-10 md:w-16 md:h-16 bg-yellow-900 rounded-full opacity-15 animate-float transition-all duration-500" style={{ animationDelay: '4s' }}></div>
+            <div className="absolute top-4 left-4 w-12 h-12 md:top-10 md:left-10 md:w-20 md:h-20 bg-amber-900 rounded-full opacity-15 animate-float"></div>
+            <div className="absolute bottom-4 right-4 w-16 h-16 md:bottom-10 md:right-10 md:w-24 md:h-24 bg-orange-900 rounded-full opacity-15 animate-float" style={{ animationDelay: '2s' }}></div>
+            <div className="absolute top-1/2 right-1/4 w-10 h-10 md:w-16 md:h-16 bg-yellow-900 rounded-full opacity-15 animate-float" style={{ animationDelay: '4s' }}></div>
           </>
         )}
       </div>
@@ -108,7 +277,7 @@ export default function SignInPage() {
       {/* Main Content */}
       <div className="w-full max-w-6xl mx-auto relative">
         <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 items-center justify-center h-full">
-          
+
           {/* LEFT — Text + Features Section - Hidden on mobile */}
           <div className="hidden lg:block space-y-4 max-h-[600px] overflow-hidden">
             <div className="space-y-3">
@@ -133,9 +302,8 @@ export default function SignInPage() {
                 { icon: Check, title: "Always in Sync", desc: "Your data stays consistent across devices." }
               ].map((i, index) => (
                 <div key={index} className={`flex items-start gap-3 p-3 ${theme.cards.background} rounded-xl border ${theme.cards.border} ${theme.cards.hoverBorder} transition-all duration-300`}>
-                  <div className={`w-10 h-10 rounded-lg ${theme.icons.background} flex items-center justify-center border ${
-                    isDarkMode ? 'border-amber-500/20' : 'border-transparent'
-                  }`}>
+                  <div className={`w-10 h-10 rounded-lg ${theme.icons.background} flex items-center justify-center border ${isDarkMode ? 'border-amber-500/20' : 'border-transparent'
+                    }`}>
                     <i.icon className={`w-5 h-5 ${theme.icons.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -152,14 +320,12 @@ export default function SignInPage() {
               <div className="grid grid-cols-2 gap-1">
                 {["Secure Account Access", "Synced Preferences", "Fast Support", "Real-time Activity"].map((f, i) => (
                   <div key={i} className="flex items-center gap-1">
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                      isDarkMode 
-                        ? 'bg-amber-900/50 border border-amber-500/20' 
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${isDarkMode
+                        ? 'bg-amber-900/50 border border-amber-500/20'
                         : 'bg-emerald-100'
-                    } transition-colors duration-300 flex-shrink-0`}>
-                      <Check className={`w-2 h-2 ${
-                        isDarkMode ? 'text-amber-400' : 'text-emerald-600'
-                      } transition-colors duration-300`} />
+                      } transition-colors duration-300 flex-shrink-0`}>
+                      <Check className={`w-2 h-2 ${isDarkMode ? 'text-amber-400' : 'text-emerald-600'
+                        } transition-colors duration-300`} />
                     </div>
                     <span className={`text-xs ${theme.text.secondary} transition-colors duration-300 truncate`}>{f}</span>
                   </div>
@@ -170,9 +336,8 @@ export default function SignInPage() {
 
           {/* Mobile-only header */}
           <div className="lg:hidden text-center mb-4">
-            <div className={`mx-auto w-12 h-12 rounded-lg flex items-center justify-center mb-2 shadow-lg border ${
-              isDarkMode ? 'bg-gradient-to-r from-amber-500 to-orange-500 border-amber-400/30' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 border-emerald-400/30'
-            }`}>
+            <div className={`mx-auto w-12 h-12 rounded-lg flex items-center justify-center mb-2 shadow-lg border ${isDarkMode ? 'bg-gradient-to-r from-amber-500 to-orange-500 border-amber-400/30' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 border-emerald-400/30'
+              }`}>
               <Lock className="w-6 h-6 text-white" />
             </div>
             <h1 className={`text-xl font-bold ${theme.text.primary} mb-1`}>Welcome back</h1>
@@ -180,79 +345,67 @@ export default function SignInPage() {
           </div>
 
           {/* RIGHT — Clerk SignIn UI - Compact */}
-          <div className={`rounded-2xl lg:rounded-3xl shadow-2xl border p-4 lg:p-6 xl:p-8 w-full max-w-md mx-auto backdrop-blur-sm transition-all duration-300 h-fit ${
-            isDarkMode 
-              ? 'bg-gray-800/90 border-gray-700' 
+          <div className={`rounded-2xl lg:rounded-3xl shadow-2xl border p-4 lg:p-6 xl:p-8 w-full max-w-md mx-auto backdrop-blur-sm transition-all duration-300 h-fit ${isDarkMode
+              ? 'bg-gray-800/90 border-gray-700'
               : 'bg-white border-slate-200'
-          }`}>
+            }`}>
             <SignIn
               path="/sign-in"
               routing="path"
               signUpUrl="/sign-up"
-              afterSignInUrl="/dashboard"
+              // 🔥 REMOVED: afterSignInUrl - Let our sync logic handle redirect
               appearance={{
                 elements: {
                   card: "bg-transparent shadow-none w-full",
-                  headerTitle: `text-xl lg:text-2xl font-bold bg-clip-text text-transparent ${
-                    isDarkMode 
-                      ? 'bg-gradient-to-r from-amber-400 to-orange-400' 
+                  headerTitle: `text-xl lg:text-2xl font-bold bg-clip-text text-transparent ${isDarkMode
+                      ? 'bg-gradient-to-r from-amber-400 to-orange-400'
                       : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900'
-                  } transition-all duration-300`,
+                    } transition-all duration-300`,
                   headerSubtitle: `text-xs lg:text-sm ${isDarkMode ? "text-gray-400" : "text-slate-500"}`,
 
-                  socialButtonsBlockButton: `border rounded-lg lg:rounded-xl py-2 lg:py-3 transition-all font-medium text-xs lg:text-sm ${
-                    isDarkMode
+                  socialButtonsBlockButton: `border rounded-lg lg:rounded-xl py-2 lg:py-3 transition-all font-medium text-xs lg:text-sm ${isDarkMode
                       ? 'bg-gray-700 border-gray-600 hover:border-amber-500 hover:bg-gray-600 text-gray-300'
                       : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                  }`,
+                    }`,
                   socialButtonsBlockButtonText: "font-medium",
 
                   dividerLine: isDarkMode ? "bg-gray-700" : "bg-slate-200",
                   dividerText: `text-xs ${isDarkMode ? 'text-gray-400' : 'text-slate-400'}`,
 
-                  formFieldLabel: `text-xs lg:text-sm font-semibold ${
-                    isDarkMode ? 'text-gray-300' : 'text-slate-700'
-                  }`,
-                  formFieldInput: `border rounded-lg lg:rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm transition-all ${
-                    isDarkMode
+                  formFieldLabel: `text-xs lg:text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-slate-700'
+                    }`,
+                  formFieldInput: `border rounded-lg lg:rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm transition-all ${isDarkMode
                       ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-amber-500 focus:bg-gray-600/50'
                       : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20'
-                  }`,
+                    }`,
 
-                  formButtonPrimary: `font-semibold rounded-lg lg:rounded-xl py-2.5 lg:py-3.5 text-sm transition-all ${
-                    isDarkMode
+                  formButtonPrimary: `font-semibold rounded-lg lg:rounded-xl py-2.5 lg:py-3.5 text-sm transition-all ${isDarkMode
                       ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white'
                       : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white'
-                  }`,
+                    }`,
 
-                  footerActionText: `text-xs lg:text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-slate-600'
-                  }`,
-                  footerActionLink: `font-semibold transition-colors duration-200 text-xs lg:text-sm ${
-                    isDarkMode 
-                      ? 'text-amber-400 hover:text-amber-300' 
+                  footerActionText: `text-xs lg:text-sm ${isDarkMode ? 'text-gray-400' : 'text-slate-600'
+                    }`,
+                  footerActionLink: `font-semibold transition-colors duration-200 text-xs lg:text-sm ${isDarkMode
+                      ? 'text-amber-400 hover:text-amber-300'
                       : 'text-emerald-600 hover:text-emerald-700'
-                  }`,
+                    }`,
 
-                  formFieldInputShowPasswordButton: `transition-colors ${
-                    isDarkMode ? 'text-gray-400 hover:text-amber-400' : 'text-slate-400 hover:text-emerald-600'
-                  }`,
+                  formFieldInputShowPasswordButton: `transition-colors ${isDarkMode ? 'text-gray-400 hover:text-amber-400' : 'text-slate-400 hover:text-emerald-600'
+                    }`,
                   identityPreviewText: `text-sm ${isDarkMode ? 'text-gray-300' : 'text-slate-700'}`,
-                  identityPreviewEditButton: `transition-colors text-xs lg:text-sm ${
-                    isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
-                  }`,
+                  identityPreviewEditButton: `transition-colors text-xs lg:text-sm ${isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
+                    }`,
 
                   alert: isDarkMode ? "bg-gray-700 border-gray-600 text-gray-300" : "bg-slate-100 border-slate-200 text-slate-700",
                   alertText: isDarkMode ? "text-gray-300" : "text-slate-700",
 
                   footer: isDarkMode ? "border-gray-700" : "border-slate-200",
-                  footerPagesLink: `transition-colors text-xs lg:text-sm ${
-                    isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
-                  }`,
+                  footerPagesLink: `transition-colors text-xs lg:text-sm ${isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
+                    }`,
 
-                  formResendCodeLink: `transition-colors text-xs lg:text-sm ${
-                    isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
-                  }`,
+                  formResendCodeLink: `transition-colors text-xs lg:text-sm ${isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-600 hover:text-emerald-700'
+                    }`,
                 },
                 layout: {
                   socialButtonsPlacement: "top",
@@ -271,8 +424,8 @@ export default function SignInPage() {
         </div>
       </div>
 
-      {/* Floating animation styles */}
-      <style jsx>{`
+      {/* Add CSS for animations in your main CSS file or use inline styles */}
+      <style>{`
         @keyframes float {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
           50% { transform: translateY(-3px) rotate(2deg); }

@@ -1,269 +1,438 @@
-// server.js
-import express from 'express';
-import { MongoClient, ObjectId } from 'mongodb';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import cors from 'cors';
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database connection
-const url = 'mongodb://localhost:27017';
-const client = new MongoClient(url);
-const dbName = 'cosmic_auth';
-
-let db;
+// Debug middleware - see what the fuck is coming in
+app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.path}`);
+  console.log('📋 Headers:', req.headers);
+  console.log('📦 Body:', req.body);
+  next();
+});
 
 // Connect to MongoDB
-async function connectDB() {
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/clerk-app', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.log('❌ MongoDB connection error:', err));
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  clerkId: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  firstName: String,
+  lastName: String,
+  fullName: String,
+  profileImage: String,
+  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  isActive: { type: Boolean, default: true },
+  lastLogin: Date,
+}, {
+  timestamps: true
+});
+
+const User = mongoose.model('User', userSchema);
+
+// SIMPLE AUTH MIDDLEWARE - FIXED VERSION
+const requireAuth = async (req, res, next) => {
   try {
-    await client.connect();
-    db = client.db(dbName);
-    console.log('✅ Connected to MongoDB');
-    
-    // Create indexes for better performance
-    await db.collection('users').createIndex({ email: 1 }, { unique: true });
-    console.log('✅ Database indexes created');
-  } catch (err) {
-    console.log('❌ DB connection failed:', err);
-  }
-}
+    console.log('🔐 Auth middleware triggered');
 
-connectDB();
+    // Get from headers OR body (for sync route)
+    const userId = req.headers['user-id'] || req.body.clerkId;
+    const userEmail = req.headers['user-email'] || req.body.email;
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    console.log('👤 Auth check:', { userId, userEmail });
 
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+    if (!userId || !userEmail) {
+      console.log('❌ Missing user ID or email');
+      return res.status(401).json({ error: 'User ID and Email required' });
     }
+
+    // Find or create user - FIXED LOGIC
+    let user = await User.findOne({ clerkId: userId });
+
+    if (!user) {
+      console.log('🆕 Creating new user in database');
+      // Check if this is the admin email
+      const isAdmin = userEmail === 'ininsico@gmail.com';
+      const role = isAdmin ? 'admin' : 'user';
+
+      user = new User({
+        clerkId: userId,
+        email: userEmail,
+        role: role,
+        lastLogin: new Date()
+      });
+
+      await user.save();
+      console.log(`✅ User created: ${user.email} as ${role}`);
+    } else {
+      console.log('📝 Updating existing user last login');
+      // Update last login for existing user
+      user.lastLogin = new Date();
+      await user.save();
+    }
+
     req.user = user;
     next();
-  });
+  } catch (error) {
+    console.error('❌ Auth error:', error);
+    res.status(500).json({ error: 'Authentication failed: ' + error.message });
+  }
 };
 
-// Routes
-
-// Home route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Cosmic Auth Server is working!',
-    database: db ? 'Connected' : 'Disconnected',
-    endpoints: [
-      'POST /api/register - Create new account',
-      'POST /api/login - User login',
-      'GET /api/profile - Get user profile (protected)',
-      'POST /api/forgot-password - Request password reset',
-      'POST /api/reset-password - Reset password'
-    ]
-  });
-});
-
-// User Registration
-app.post('/api/register', async (req, res) => {
-  try {
-    const { fullName, email, password } = req.body;
-
-    // Validation
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    // Check if user already exists
-    const existingUser = await db.collection('users').findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({ error: 'User already exists with this email' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create user
-    const user = {
-      fullName,
-      email,
-      password: hashedPassword,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      isActive: true
-    };
-
-    const result = await db.collection('users').insertOne(user);
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        userId: result.insertedId, 
-        email: user.email 
-      }, 
-      JWT_SECRET, 
-      { expiresIn: '24h' }
-    );
-
-    // Return user data (without password)
-    const userResponse = {
-      id: result.insertedId,
-      fullName: user.fullName,
-      email: user.email,
-      createdAt: user.createdAt
-    };
-
-    res.status(201).json({
-      message: 'User registered successfully',
-      user: userResponse,
-      token
-    });
-
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
   }
-});
+  next();
+};
 
-// User Login
-app.post('/api/login', async (req, res) => {
+// ROUTES
+
+// Sync user data (call this after login) - FIXED VERSION
+app.post('/api/users/sync', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    console.log('🔄 Sync route called with body:', req.body);
 
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const { clerkId, email, firstName, lastName, profileImage } = req.body;
+
+    if (!clerkId || !email) {
+      return res.status(400).json({ error: 'clerkId and email required' });
     }
 
-    // Find user
-    const user = await db.collection('users').findOne({ email });
+    // Check if this is the admin email
+    const isAdmin = email === 'ininsico@gmail.com';
+    const role = isAdmin ? 'admin' : 'user';
+
+    // Find or create user
+    let user = await User.findOne({ clerkId: clerkId });
+
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      console.log('🆕 Creating new user in database via sync');
+      user = new User({
+        clerkId: clerkId,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        fullName: `${firstName || ''} ${lastName || ''}`.trim(),
+        profileImage: profileImage,
+        role: role,
+        lastLogin: new Date()
+      });
+    } else {
+      console.log('📝 Updating existing user via sync');
+      // Update user data
+      user.firstName = firstName;
+      user.lastName = lastName;
+      user.fullName = `${firstName || ''} ${lastName || ''}`.trim();
+      user.profileImage = profileImage;
+      user.lastLogin = new Date();
     }
 
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({ error: 'Account is deactivated' });
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        userId: user._id, 
-        email: user.email 
-      }, 
-      JWT_SECRET, 
-      { expiresIn: '24h' }
-    );
-
-    // Update last login
-    await db.collection('users').updateOne(
-      { _id: user._id },
-      { $set: { lastLogin: new Date() } }
-    );
-
-    // Return user data (without password)
-    const userResponse = {
-      id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      createdAt: user.createdAt
-    };
+    await user.save();
+    console.log(`✅ User synced: ${user.email} as ${user.role}`);
 
     res.json({
-      message: 'Login successful',
-      user: userResponse,
-      token
+      success: true,
+      user: {
+        id: user.clerkId,
+        email: user.email,
+        role: user.role,
+        isAdmin: user.role === 'admin',
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImage: user.profileImage
+      }
     });
 
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Sync error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
-// Get User Profile (Protected)
-app.get('/api/profile', authenticateToken, async (req, res) => {
+// Get current user profile
+app.get('/api/users/me', requireAuth, async (req, res) => {
   try {
-    const user = await db.collection('users').findOne(
-      { _id: new ObjectId(req.user.userId) },
-      { projection: { password: 0 } } // Exclude password
-    );
+    res.json({
+      id: req.user.clerkId,
+      email: req.user.email,
+      role: req.user.role,
+      isAdmin: req.user.role === 'admin',
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      profileImage: req.user.profileImage,
+      lastLogin: req.user.lastLogin
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all users (Admin only)
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = '' } = req.query;
+
+    const query = {
+      isActive: true,
+      $or: [
+        { fullName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ]
+    };
+
+    const users = await User.find(query)
+      .select('-__v')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 });
+
+    const total = await User.countDocuments(query);
+
+    res.json({
+      users: users.map(user => ({
+        id: user.clerkId,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt
+      })),
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page),
+      total
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test database connection
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const testUser = new User({
+      clerkId: 'test-' + Date.now(),
+      email: 'test@test.com',
+      firstName: 'Test',
+      lastName: 'User'
+    });
+
+    await testUser.save();
+    console.log('✅ Test user created successfully');
+
+    // Clean up
+    await User.deleteOne({ email: 'test@test.com' });
+
+    res.json({ success: true, message: 'Database working!' });
+  } catch (error) {
+    console.log('❌ Database test failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user by ID
+app.get('/api/users/:id', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findOne({
+      $or: [
+        { clerkId: req.params.id },
+        { _id: req.params.id }
+      ],
+      isActive: true
+    }).select('-__v');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
-  } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Forgot Password
-app.post('/api/forgot-password', async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+    // Users can only see their own profile unless they're admin
+    if (req.user.role !== 'admin' && user.clerkId !== req.user.clerkId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    const user = await db.collection('users').findOne({ email });
-    
-    // Always return success to prevent email enumeration
-    res.json({ 
-      message: 'If an account with that email exists, a reset link has been sent' 
-    });
-
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Database status check
-app.get('/db-status', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'DB not connected' });
-    }
-    
-    const collections = await db.listCollections().toArray();
-    const usersCount = await db.collection('users').countDocuments();
-    
     res.json({
-      database: db.databaseName,
-      collections: collections.map(c => c.name),
-      usersCount,
-      status: 'Database is fucking working'
+      id: user.clerkId,
+      email: user.email,
+      role: user.role,
+      isAdmin: user.role === 'admin',
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImage: user.profileImage,
+      lastLogin: user.lastLogin
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Start server
+// Update user role (Admin only)
+app.patch('/api/users/:id/role', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { role } = req.body;
+
+    if (!['user', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      {
+        $or: [
+          { clerkId: req.params.id },
+          { _id: req.params.id }
+        ],
+        isActive: true
+      },
+      { role },
+      { new: true }
+    ).select('-__v');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.clerkId,
+      email: user.email,
+      role: user.role,
+      isAdmin: user.role === 'admin'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete user (Admin only)
+app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findOne({
+      $or: [
+        { clerkId: req.params.id },
+        { _id: req.params.id }
+      ],
+      isActive: true
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Prevent admin from deleting themselves
+    if (user.clerkId === req.user.clerkId) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    await User.findOneAndUpdate(
+      { _id: user._id },
+      { isActive: false }
+    );
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Initialize admin user (run this once to set ininsico@gmail.com as admin)
+app.post('/api/init-admin', async (req, res) => {
+  try {
+    // Find all existing users and set ininsico@gmail.com as admin
+    const result = await User.updateMany(
+      { email: 'ininsico@gmail.com' },
+      { role: 'admin' }
+    );
+
+    res.json({
+      message: 'Admin user initialized',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Force create a test user
+app.post('/api/force-create-user', async (req, res) => {
+  try {
+    const { clerkId, email, firstName, lastName } = req.body;
+
+    if (!clerkId || !email) {
+      return res.status(400).json({ error: 'clerkId and email required' });
+    }
+
+    const user = new User({
+      clerkId,
+      email,
+      firstName,
+      lastName,
+      fullName: `${firstName || ''} ${lastName || ''}`.trim(),
+      lastLogin: new Date()
+    });
+
+    await user.save();
+
+    console.log(`✅ FORCE CREATED USER: ${user.email}`);
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error('❌ Force create error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all users in database (for debugging)
+app.get('/api/debug/users', async (req, res) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json({
+      total: users.length,
+      users: users.map(u => ({
+        id: u.clerkId,
+        email: u.email,
+        role: u.role,
+        isAdmin: u.role === 'admin',
+        firstName: u.firstName,
+        lastName: u.lastName,
+        createdAt: u.createdAt,
+        lastLogin: u.lastLogin
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
+});
+
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`🚀 Cosmic Auth Server running on port ${PORT}`);
-  console.log(`📍 http://localhost:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`✅ Health: http://localhost:${PORT}/api/health`);
+  console.log(`🐛 Debug users: http://localhost:${PORT}/api/debug/users`);
+  console.log(`👑 Init admin: http://localhost:${PORT}/api/init-admin`);
+  console.log(`🔧 Test DB: http://localhost:${PORT}/api/test-db`);
+  console.log(`💥 Force create user: http://localhost:${PORT}/api/force-create-user`);
 });
