@@ -2,7 +2,13 @@ import mongoose from "mongoose";
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -51,6 +57,447 @@ const userSchema = new mongoose.Schema(
 );
 
 const User = mongoose.model("User", userSchema);
+
+// ========================================
+// PRODUCT SCHEMA & MODEL
+// ========================================
+const productSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Product name is required"],
+      trim: true,
+      maxlength: [100, "Name cannot exceed 100 characters"],
+    },
+    image: String,
+    description: {
+      type: String,
+      required: [true, "Description is required"],
+      trim: true,
+      maxlength: [500, "Description cannot exceed 500 characters"],
+    },
+    price: {
+      type: Number,
+      required: [true, "Price is required"],
+      min: [0, "Price cannot be negative"],
+    },
+    stock: {
+      type: Number,
+      required: [true, "Stock is required"],
+      min: [0, "Stock cannot be negative"],
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock must be an integer",
+      },
+    },
+    category: {
+      type: String,
+      required: [true, "Category is required"],
+      trim: true,
+      enum: ["electronics", "clothing", "food", "books", "furniture", "other"],
+    },
+    status: {
+      type: String,
+      required: [true, "Status is required"],
+      enum: ["active", "out of stock"],
+      default: "active",
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+productSchema.index({ name: 1 });
+productSchema.index({ price: 1 });
+
+const Product = mongoose.model("Product", productSchema);
+
+// ========================================
+// MULTER SETUP FOR PRODUCT IMAGES
+// ========================================
+const multerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "public/productImg");
+  },
+  filename: (req, file, cb) => {
+    const ext = file.mimetype.split("/")[1];
+    cb(null, `product-${Date.now()}.${ext}`);
+  },
+});
+
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Please upload only images"), false);
+  }
+};
+
+const upload = multer({
+  storage: multerStorage,
+  fileFilter: multerFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+const isValidObjectId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
+// Simple error wrapper for async routes
+const catchAsync = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// ========================================
+// PRODUCT CONTROLLER FUNCTIONS
+// ========================================
+
+// @desc    Insert new product
+// @route   POST /api/products
+// @access  Private (authenticated users only)
+const insertProduct = catchAsync(async (req, res, next) => {
+  const { name, description, price, stock, category, status } = req.body;
+
+  // Input validation to prevent SQL/NoSQL injection
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
+    return res.status(400).json({ error: "Valid product name is required" });
+  }
+
+  if (
+    !description ||
+    typeof description !== "string" ||
+    description.trim().length === 0
+  ) {
+    return res.status(400).json({ error: "Valid description is required" });
+  }
+
+  if (
+    price === undefined ||
+    typeof price !== "number" ||
+    isNaN(price) ||
+    price < 0
+  ) {
+    return res.status(400).json({ error: "Valid price (>= 0) is required" });
+  }
+
+  if (
+    stock === undefined ||
+    typeof stock !== "number" ||
+    isNaN(stock) ||
+    stock < 0 ||
+    !Number.isInteger(stock)
+  ) {
+    return res
+      .status(400)
+      .json({ error: "Valid stock (integer >= 0) is required" });
+  }
+
+  if (
+    !category ||
+    typeof category !== "string" ||
+    category.trim().length === 0
+  ) {
+    return res.status(400).json({ error: "Valid category is required" });
+  }
+
+  const validStatuses = ["active", "out of stock"];
+  if (status && !validStatuses.includes(status)) {
+    return res
+      .status(400)
+      .json({ error: "Status must be either 'active' or 'out of stock'" });
+  }
+
+  // Validate length constraints
+  if (name.length > 100) {
+    return res
+      .status(400)
+      .json({ error: "Product name cannot exceed 100 characters" });
+  }
+
+  if (description.length > 500) {
+    return res
+      .status(400)
+      .json({ error: "Description cannot exceed 500 characters" });
+  }
+
+  // Create product using Mongoose
+  const product = await Product.create({
+    name: name.trim(),
+    description: description.trim(),
+    price,
+    stock,
+    category: category.trim(),
+    status: status || "active",
+    image: req.file ? `/productImg/${req.file.filename}` : undefined,
+  });
+
+  res.status(201).json({
+    status: "success",
+    message: "Product inserted successfully",
+    data: {
+      product: {
+        id: product._id,
+        name: product.name,
+        image: product.image,
+        description: product.description,
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        status: product.status,
+        createdAt: product.createdAt,
+      },
+    },
+  });
+});
+
+// @desc    Get product by ID
+// @route   GET /api/products/:id
+// @access  Private (authenticated users only)
+const getProduct = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  // Validate ObjectId format to prevent NoSQL injection
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ error: "Invalid product ID format" });
+  }
+
+  const product = await Product.findById(id).select("-__v");
+
+  if (!product) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  res.json({
+    status: "success",
+    data: {
+      product: {
+        id: product._id,
+        name: product.name,
+        image: product.image,
+        description: product.description,
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        status: product.status,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+      },
+    },
+  });
+});
+
+// @desc    Get all products
+// @route   GET /api/products
+// @access  Private (authenticated users only)
+const getAllProducts = catchAsync(async (req, res, next) => {
+  const products = await Product.find().select("-__v").sort({ createdAt: -1 });
+
+  // Calculate order totals
+  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
+
+  res.json({
+    status: "success",
+    results: products.length,
+    data: {
+      products: products.map((p) => ({
+        id: p._id,
+        name: p.name,
+        image: p.image,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        category: p.category,
+        status: p.status,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      })),
+      totals: {
+        totalProducts: products.length,
+        totalStockUnits: totalStock,
+        totalInventoryValue: parseFloat(totalValue.toFixed(2)),
+      },
+    },
+  });
+});
+
+// @desc    Update product
+// @route   PUT /api/products/:id
+// @access  Private (authenticated users only)
+const updateProduct = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const { name, description, price, stock, category, status } = req.body;
+
+  // Validate ObjectId format to prevent NoSQL injection
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ error: "Invalid product ID format" });
+  }
+
+  // Build update object with validation
+  const updateData = {};
+
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ error: "Valid product name is required" });
+    }
+    if (name.length > 100) {
+      return res
+        .status(400)
+        .json({ error: "Product name cannot exceed 100 characters" });
+    }
+    updateData.name = name.trim();
+  }
+
+  if (description !== undefined) {
+    if (typeof description !== "string" || description.trim().length === 0) {
+      return res.status(400).json({ error: "Valid description is required" });
+    }
+    if (description.length > 500) {
+      return res
+        .status(400)
+        .json({ error: "Description cannot exceed 500 characters" });
+    }
+    updateData.description = description.trim();
+  }
+
+  if (price !== undefined) {
+    if (typeof price !== "number" || isNaN(price) || price < 0) {
+      return res.status(400).json({ error: "Valid price (>= 0) is required" });
+    }
+    updateData.price = price;
+  }
+
+  if (stock !== undefined) {
+    if (
+      typeof stock !== "number" ||
+      isNaN(stock) ||
+      stock < 0 ||
+      !Number.isInteger(stock)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Valid stock (integer >= 0) is required" });
+    }
+    updateData.stock = stock;
+  }
+
+  if (category !== undefined) {
+    if (typeof category !== "string" || category.trim().length === 0) {
+      return res.status(400).json({ error: "Valid category is required" });
+    }
+    updateData.category = category.trim();
+  }
+
+  if (status !== undefined) {
+    const validStatuses = ["active", "out of stock"];
+    if (!validStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ error: "Status must be either 'active' or 'out of stock'" });
+    }
+    updateData.status = status;
+  }
+
+  if (req.file) {
+    updateData.image = `/productImg/${req.file.filename}`;
+  }
+
+  // Check if there's anything to update
+  if (Object.keys(updateData).length === 0) {
+    return res
+      .status(400)
+      .json({ error: "No valid fields provided for update" });
+  }
+
+  const product = await Product.findByIdAndUpdate(id, updateData, {
+    new: true,
+    runValidators: true,
+  }).select("-__v");
+
+  if (!product) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  res.json({
+    status: "success",
+    message: "Product updated successfully",
+    data: {
+      product: {
+        id: product._id,
+        name: product.name,
+        image: product.image,
+        description: product.description,
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        status: product.status,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+      },
+    },
+  });
+});
+
+// @desc    Delete product
+// @route   DELETE /api/products/:id
+// @access  Private (authenticated users only)
+const deleteProduct = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+
+  // Validate ObjectId format to prevent NoSQL injection
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ error: "Invalid product ID format" });
+  }
+
+  const product = await Product.findByIdAndDelete(id);
+
+  if (!product) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  res.json({
+    status: "success",
+    message: "Product deleted successfully",
+    data: {
+      deletedProduct: {
+        id: product._id,
+        name: product.name,
+      },
+    },
+  });
+});
+
+// @desc    Calculate order totals
+// @route   GET /api/products/totals
+// @access  Private (authenticated users only)
+const getOrderTotals = catchAsync(async (req, res, next) => {
+  const products = await Product.find();
+
+  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
+  const averagePrice =
+    products.length > 0
+      ? totalValue / products.reduce((sum, p) => sum + p.stock, 0)
+      : 0;
+
+  res.json({
+    status: "success",
+    data: {
+      totals: {
+        totalProducts: products.length,
+        totalStockUnits: totalStock,
+        totalInventoryValue: parseFloat(totalValue.toFixed(2)),
+        averageProductPrice: parseFloat(averagePrice.toFixed(2)),
+      },
+    },
+  });
+});
 
 // SIMPLE AUTH MIDDLEWARE - FIXED VERSION
 const requireAuth = async (req, res, next) => {
@@ -109,6 +556,43 @@ const requireAdmin = (req, res, next) => {
 };
 
 // ROUTES
+
+// ========================================
+// PRODUCT ROUTES
+// ========================================
+// Get all products (public)
+app.get("/api/products", getAllProducts);
+
+// Get product by ID (public)
+app.get("/api/products/:id", getProduct);
+
+// Get product totals (public)
+app.get("/api/products/totals", getOrderTotals);
+
+// Create product (admin only) with image upload
+app.post(
+  "/api/products",
+  requireAuth,
+  requireAdmin,
+  upload.single("image"),
+  insertProduct
+);
+
+// Update product (admin only) with image upload
+app.put(
+  "/api/products/:id",
+  requireAuth,
+  requireAdmin,
+  upload.single("image"),
+  updateProduct
+);
+
+// Delete product (admin only)
+app.delete("/api/products/:id", requireAuth, requireAdmin, deleteProduct);
+
+// ========================================
+// USER ROUTES
+// ========================================
 
 // Sync user data (call this after login) - FIXED VERSION
 app.post("/api/users/sync", async (req, res) => {

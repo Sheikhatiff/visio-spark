@@ -16,6 +16,7 @@ import {
   initAdmin,
   testDBConnection,
 } from "./controllers/user.controller.js";
+import productRouter from "./routes/product.routes.js";
 
 const app = express();
 app.use(cors());
@@ -65,6 +66,7 @@ app.get("/api/debug/users", getAllUsersForDebugging);
 app.get("/api/health", checkHealth);
 
 app.use("/api/users", userRouter);
+app.use("/api/products", productRouter);
 
 // --------------------
 // Global Error Handler
